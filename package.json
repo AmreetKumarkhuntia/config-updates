@@ -11,7 +11,7 @@
     "dev": "vite dev --port 5100",
     "build": "vite build",
     "preview": "vite preview",
-    "prepare": "svelte-kit sync",
+    "prepare": "svelte-kit sync && (git config core.hooksPath .githooks || true)",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "format": "prettier --write .",

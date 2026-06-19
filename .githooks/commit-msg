@@ -1,0 +1,40 @@
+#!/bin/sh
+# Enforce Conventional-Commit-style messages: type(scope): subject
+#
+#   <type>(<scope>): <subject>
+#   <blank line>
+#   <optional body>
+#
+# - type:  feat | fix | doc | docs | chore | refactor | test | perf | build | ci | style
+# - scope: required, e.g. (logging), (providers), (git)
+# - subject: required
+#
+# Activated via `git config core.hooksPath .githooks` (done by the package.json
+# `prepare` script on `pnpm install`).
+
+msg_file="$1"
+
+# First line that is neither blank nor a comment.
+subject=$(grep -vE '^[[:space:]]*#' "$msg_file" | grep -vE '^[[:space:]]*$' | head -n 1)
+
+# Let git's own merge/revert/fixup/squash messages through untouched.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*)
+    exit 0
+    ;;
+esac
+
+pattern='^(feat|fix|doc|docs|chore|refactor|test|perf|build|ci|style)\([a-z0-9._/-]+\): .+'
+
+if printf '%s' "$subject" | grep -qE "$pattern"; then
+  exit 0
+fi
+
+echo "✖ Invalid commit message." >&2
+echo "" >&2
+echo "  Required format:  type(scope): subject" >&2
+echo "  Types:            feat fix doc docs chore refactor test perf build ci style" >&2
+echo "  Scope is required, e.g.:  feat(logging): add colorized logger" >&2
+echo "" >&2
+echo "  Got: $subject" >&2
+exit 1

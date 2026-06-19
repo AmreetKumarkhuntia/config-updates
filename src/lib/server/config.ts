@@ -1,16 +1,16 @@
 // Server-only configuration + allowlist guards.
 // Auth model: service-account key only (no ADC).
 
-import { readFileSync } from 'node:fs';
-import { env } from '$env/dynamic/private';
-import type { UrlMapTarget } from '$lib/types';
+import { readFileSync } from "node:fs";
+import { env } from "$env/dynamic/private";
+import type { UrlMapTarget } from "$lib/types";
 
 /** Thrown when a request targets a bucket / URL map outside the allowlist. */
 export class ForbiddenError extends Error {
   readonly status = 403;
   constructor(message: string) {
     super(message);
-    this.name = 'ForbiddenError';
+    this.name = "ForbiddenError";
   }
 }
 
@@ -19,13 +19,13 @@ export class ConfigError extends Error {
   readonly status = 500;
   constructor(message: string) {
     super(message);
-    this.name = 'ConfigError';
+    this.name = "ConfigError";
   }
 }
 
 /** Raw GCP_PROJECT_ID env value. Prefer resolveProjectId() for the effective project. */
 export function getProjectId(): string {
-  return env.GCP_PROJECT_ID?.trim() ?? '';
+  return env.GCP_PROJECT_ID?.trim() ?? "";
 }
 
 /**
@@ -39,27 +39,32 @@ export function resolveProjectId(): string {
   const keyFile = getKeyFile();
   if (keyFile) {
     try {
-      const json = JSON.parse(readFileSync(keyFile, 'utf-8')) as { project_id?: string };
+      const json = JSON.parse(readFileSync(keyFile, "utf-8")) as {
+        project_id?: string;
+      };
       if (json.project_id) return json.project_id;
     } catch {
       // unreadable / non-JSON key file — fall through to the "not set" error
     }
   }
-  return '';
+  return "";
 }
 
 export function getClientEmail(): string {
-  return env.GCP_CLIENT_EMAIL?.trim() ?? '';
+  return env.GCP_CLIENT_EMAIL?.trim() ?? "";
 }
 
 /** Private key with escaped newlines un-escaped (matches lighthouse handling). */
 export function getPrivateKey(): string {
-  return env.GCP_PRIVATE_KEY ? env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
+  return env.GCP_PRIVATE_KEY ? env.GCP_PRIVATE_KEY.replace(/\\n/g, "\n") : "";
 }
 
 /** Key-file path: GCP_KEY_FILE, else the standard GOOGLE_APPLICATION_CREDENTIALS (pod mount). */
 export function getKeyFile(): string {
-  return (env.GCP_KEY_FILE?.trim() || env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) ?? '';
+  return (
+    (env.GCP_KEY_FILE?.trim() || env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) ??
+    ""
+  );
 }
 
 /** Allowlisted GCS bucket names (GCP_BUCKETS, comma-separated). */
@@ -73,7 +78,7 @@ export function getBuckets(): string[] {
  */
 export function getUrlMaps(): UrlMapTarget[] {
   return splitList(env.GCP_URL_MAPS).map((entry) => {
-    const [name, domain] = entry.split('|').map((p) => p.trim());
+    const [name, domain] = entry.split("|").map((p) => p.trim());
     return domain ? { name, domain } : { name };
   });
 }
@@ -81,24 +86,28 @@ export function getUrlMaps(): UrlMapTarget[] {
 /** Local directory where previous config versions are backed up before overwrite. */
 export function getBackupDir(): string {
   const dir = env.BACKUP_DIR?.trim();
-  return dir && dir.length > 0 ? dir : './backups';
+  return dir && dir.length > 0 ? dir : "./backups";
 }
 
 export function assertBucketAllowed(bucket: string): void {
   if (!getBuckets().includes(bucket)) {
-    throw new ForbiddenError(`Bucket "${bucket}" is not in the allowlist (GCP_BUCKETS).`);
+    throw new ForbiddenError(
+      `Bucket "${bucket}" is not in the allowlist (GCP_BUCKETS).`,
+    );
   }
 }
 
 export function assertUrlMapAllowed(urlMap: string): void {
   if (!getUrlMaps().some((m) => m.name === urlMap)) {
-    throw new ForbiddenError(`URL map "${urlMap}" is not in the allowlist (GCP_URL_MAPS).`);
+    throw new ForbiddenError(
+      `URL map "${urlMap}" is not in the allowlist (GCP_URL_MAPS).`,
+    );
   }
 }
 
 function splitList(value: string | undefined): string[] {
-  return (value ?? '')
-    .split(',')
+  return (value ?? "")
+    .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }

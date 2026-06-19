@@ -2,10 +2,16 @@
 // Cloud CDN cache invalidation. Service-account-key-only auth — explicit
 // credentials are passed to BOTH clients (no ADC).
 
-import { Storage, type StorageOptions } from '@google-cloud/storage';
-import { UrlMapsClient } from '@google-cloud/compute';
-import { ConfigError, getClientEmail, getKeyFile, getPrivateKey, resolveProjectId } from '../config';
-import type { ConfigStore, InvalidateOp, ReadResult } from './types';
+import { Storage, type StorageOptions } from "@google-cloud/storage";
+import { UrlMapsClient } from "@google-cloud/compute";
+import {
+  ConfigError,
+  getClientEmail,
+  getKeyFile,
+  getPrivateKey,
+  resolveProjectId,
+} from "../config";
+import type { ConfigStore, InvalidateOp, ReadResult } from "./types";
 
 type ClientOptions = {
   projectId: string;
@@ -20,14 +26,17 @@ function buildClientOptions(): ClientOptions {
   const projectId = resolveProjectId();
   if (!projectId) {
     throw new ConfigError(
-      'GCP_PROJECT_ID is not set and could not be derived from the key file.'
+      "GCP_PROJECT_ID is not set and could not be derived from the key file.",
     );
   }
 
   const clientEmail = getClientEmail();
   const privateKey = getPrivateKey();
   if (clientEmail && privateKey) {
-    return { projectId, credentials: { client_email: clientEmail, private_key: privateKey } };
+    return {
+      projectId,
+      credentials: { client_email: clientEmail, private_key: privateKey },
+    };
   }
 
   const keyFile = getKeyFile();
@@ -36,7 +45,7 @@ function buildClientOptions(): ClientOptions {
   }
 
   throw new ConfigError(
-    'No service-account credentials configured. Set GCP_CLIENT_EMAIL + GCP_PRIVATE_KEY, or GCP_KEY_FILE.'
+    "No service-account credentials configured. Set GCP_CLIENT_EMAIL + GCP_PRIVATE_KEY, or GCP_KEY_FILE.",
   );
 }
 
@@ -57,8 +66,8 @@ function getUrlMapsClient(): UrlMapsClient {
 function isNotFound(error: unknown): boolean {
   return (
     !!error &&
-    typeof error === 'object' &&
-    'code' in error &&
+    typeof error === "object" &&
+    "code" in error &&
     (error as { code: unknown }).code === 404
   );
 }
@@ -75,7 +84,7 @@ export const gcpStore: ConfigStore = {
       } catch {
         // metadata is best-effort; ignore failures
       }
-      return { content: data.toString('utf-8'), exists: true, contentType };
+      return { content: data.toString("utf-8"), exists: true, contentType };
     } catch (error) {
       if (isNotFound(error)) {
         return { content: null, exists: false };
@@ -88,24 +97,25 @@ export const gcpStore: ConfigStore = {
     await getStorage()
       .bucket(bucket)
       .file(path)
-      .save(Buffer.from(content, 'utf-8'), {
+      .save(Buffer.from(content, "utf-8"), {
         metadata: { contentType },
-        resumable: true
+        resumable: true,
       });
   },
 
   async invalidate(urlMap, path): Promise<InvalidateOp> {
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const [operation] = await getUrlMapsClient().invalidateCache({
       project: resolveProjectId(),
       urlMap,
-      cacheInvalidationRuleResource: { path: normalizedPath }
+      cacheInvalidationRuleResource: { path: normalizedPath },
     });
-    const raw = (operation as { latestResponse?: { name?: string; id?: string | number } })
-      .latestResponse;
+    const raw = (
+      operation as { latestResponse?: { name?: string; id?: string | number } }
+    ).latestResponse;
     return {
       operationName: raw?.name,
-      operationId: raw?.id != null ? String(raw.id) : undefined
+      operationId: raw?.id != null ? String(raw.id) : undefined,
     };
   },
 
@@ -116,5 +126,5 @@ export const gcpStore: ConfigStore = {
     } catch {
       return false;
     }
-  }
+  },
 };

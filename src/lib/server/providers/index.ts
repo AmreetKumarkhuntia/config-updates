@@ -1,5 +1,5 @@
-import type { ConfigStore } from './types';
-import { gcpStore } from './gcp';
+import type { ConfigStore } from "./types";
+import { gcpStore } from "./gcp";
 
 /**
  * Returns the active cloud provider implementation.

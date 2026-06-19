@@ -1,63 +1,67 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import { lineDiff, type DiffLine } from '$lib/diff';
-  import type { CurrentConfigResponse, UpdateResult } from '$lib/types';
+  import type { PageData } from "./$types";
+  import { lineDiff, type DiffLine } from "$lib/diff";
+  import type { CurrentConfigResponse, UpdateResult } from "$lib/types";
 
   let { data }: { data: PageData } = $props();
 
   // svelte-ignore state_referenced_locally
-  let bucket = $state(data.buckets[0] ?? '');
-  let path = $state('');
+  let bucket = $state(data.buckets[0] ?? "");
+  let path = $state("");
 
   let currentContent = $state<string | null>(null);
   let currentExists = $state(false);
   let currentLoaded = $state(false);
 
-  let newContent = $state('');
+  let newContent = $state("");
   // svelte-ignore state_referenced_locally
   let selectedUrlMaps = $state<string[]>(data.urlMaps.map((m) => m.name));
 
   let loadingCurrent = $state(false);
   let reviewing = $state(false);
   let submitting = $state(false);
-  let errorMsg = $state('');
+  let errorMsg = $state("");
   let result = $state<UpdateResult | null>(null);
 
-  const diff = $derived<DiffLine[]>(reviewing ? lineDiff(currentContent ?? '', newContent) : []);
-  const addCount = $derived(diff.filter((d) => d.type === 'add').length);
-  const delCount = $derived(diff.filter((d) => d.type === 'del').length);
-  const isJsonPath = $derived(path.trim().toLowerCase().endsWith('.json'));
+  const diff = $derived<DiffLine[]>(
+    reviewing ? lineDiff(currentContent ?? "", newContent) : [],
+  );
+  const addCount = $derived(diff.filter((d) => d.type === "add").length);
+  const delCount = $derived(diff.filter((d) => d.type === "del").length);
+  const isJsonPath = $derived(path.trim().toLowerCase().endsWith(".json"));
   const jsonError = $derived.by(() => {
-    if (!isJsonPath || !newContent.trim()) return '';
+    if (!isJsonPath || !newContent.trim()) return "";
     try {
       JSON.parse(newContent);
-      return '';
+      return "";
     } catch (e) {
-      return e instanceof Error ? e.message : 'Invalid JSON';
+      return e instanceof Error ? e.message : "Invalid JSON";
     }
   });
-  const hasChanges = $derived((currentContent ?? '') !== newContent);
+  const hasChanges = $derived((currentContent ?? "") !== newContent);
 
   function resetTarget() {
     currentLoaded = false;
     reviewing = false;
     result = null;
-    errorMsg = '';
+    errorMsg = "";
   }
 
   async function loadCurrent() {
     resetTarget();
     if (!bucket || !path.trim()) {
-      errorMsg = 'Select a bucket and enter a path first.';
+      errorMsg = "Select a bucket and enter a path first.";
       return;
     }
     loadingCurrent = true;
     try {
       const res = await fetch(
-        `/api/config?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path.trim())}`
+        `/api/config?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path.trim())}`,
       );
       if (!res.ok) {
-        errorMsg = (await res.text()) || `Failed to load current config (${res.status}).`;
+        errorMsg =
+          (await res.text()) ||
+          `Failed to load current config (${res.status}).`;
         return;
       }
       const body: CurrentConfigResponse = await res.json();
@@ -67,16 +71,17 @@
       // Prefill the editor with the current content for convenient editing.
       if (!newContent && body.content) newContent = body.content;
     } catch (e) {
-      errorMsg = e instanceof Error ? e.message : 'Network error while loading config.';
+      errorMsg =
+        e instanceof Error ? e.message : "Network error while loading config.";
     } finally {
       loadingCurrent = false;
     }
   }
 
   function review() {
-    errorMsg = '';
+    errorMsg = "";
     if (!currentLoaded) {
-      errorMsg = 'Load the current config before reviewing changes.';
+      errorMsg = "Load the current config before reviewing changes.";
       return;
     }
     if (jsonError) {
@@ -84,26 +89,26 @@
       return;
     }
     if (!hasChanges) {
-      errorMsg = 'No changes between current and new config.';
+      errorMsg = "No changes between current and new config.";
       return;
     }
     reviewing = true;
   }
 
   async function confirmPush() {
-    errorMsg = '';
+    errorMsg = "";
     result = null;
     submitting = true;
     try {
-      const res = await fetch('/api/config/update', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/config/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           bucket,
           path: path.trim(),
           content: newContent,
-          urlMaps: selectedUrlMaps
-        })
+          urlMaps: selectedUrlMaps,
+        }),
       });
       const text = await res.text();
       if (!res.ok) {
@@ -116,7 +121,8 @@
       currentContent = newContent;
       currentExists = true;
     } catch (e) {
-      errorMsg = e instanceof Error ? e.message : 'Network error during update.';
+      errorMsg =
+        e instanceof Error ? e.message : "Network error during update.";
     } finally {
       submitting = false;
     }
@@ -131,14 +137,15 @@
   <header>
     <h1>Config Updates</h1>
     <p class="sub">
-      Patch a config object in a GCS bucket, then invalidate the Cloud CDN cache on the load
-      balancer. <span class="badge">GCP</span>
+      Patch a config object in a GCS bucket, then invalidate the Cloud CDN cache
+      on the load balancer. <span class="badge">GCP</span>
     </p>
   </header>
 
   {#if data.buckets.length === 0}
     <div class="notice warn">
-      No buckets are configured. Set <code>GCP_BUCKETS</code> in your <code>.env</code>.
+      No buckets are configured. Set <code>GCP_BUCKETS</code> in your
+      <code>.env</code>.
     </div>
   {/if}
 
@@ -167,7 +174,7 @@
       </label>
 
       <button class="btn" onclick={loadCurrent} disabled={loadingCurrent}>
-        {loadingCurrent ? 'Loading…' : 'Load current'}
+        {loadingCurrent ? "Loading…" : "Load current"}
       </button>
     </div>
   </section>
@@ -179,13 +186,14 @@
           <span class="label">Current config</span>
           {#if currentLoaded}
             <span class="tag {currentExists ? 'ok' : 'new'}">
-              {currentExists ? 'exists' : 'does not exist — will be created'}
+              {currentExists ? "exists" : "does not exist — will be created"}
             </span>
           {/if}
         </div>
         <pre class="viewer">{#if !currentLoaded}<span class="muted"
               >Load a path to see its current content.</span
-            >{:else if currentContent === null}<span class="muted">(empty / new object)</span
+            >{:else if currentContent === null}<span class="muted"
+              >(empty / new object)</span
             >{:else}{currentContent}{/if}</pre>
       </div>
 
@@ -204,8 +212,7 @@
           class="editor"
           bind:value={newContent}
           placeholder="Paste the new config here…"
-          spellcheck="false"
-        ></textarea>
+          spellcheck="false"></textarea>
         {#if jsonError}
           <p class="hint err">{jsonError}</p>
         {/if}
@@ -223,7 +230,11 @@
       <div class="lb-list">
         {#each data.urlMaps as m (m.name)}
           <label class="check">
-            <input type="checkbox" bind:group={selectedUrlMaps} value={m.name} />
+            <input
+              type="checkbox"
+              bind:group={selectedUrlMaps}
+              value={m.name}
+            />
             <span class="lb-name">{m.name}</span>
             {#if m.domain}<span class="lb-domain">{m.domain}</span>{/if}
           </label>
@@ -233,7 +244,11 @@
   </section>
 
   <section class="actions">
-    <button class="btn primary" onclick={review} disabled={!currentLoaded || submitting}>
+    <button
+      class="btn primary"
+      onclick={review}
+      disabled={!currentLoaded || submitting}
+    >
       Review changes
     </button>
   </section>
@@ -246,13 +261,22 @@
     <section class="card">
       <div class="col-head">
         <span class="label">Diff</span>
-        <span class="diff-stat"><span class="add">+{addCount}</span> <span class="del">−{delCount}</span></span>
+        <span class="diff-stat"
+          ><span class="add">+{addCount}</span>
+          <span class="del">−{delCount}</span></span
+        >
       </div>
       <div class="diff">
         {#each diff as line, i (i)}
-          <div class="dl {line.type}"><span class="gutter"
-              >{line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' '}</span
-            ><span class="dl-text">{line.text}</span></div>
+          <div class="dl {line.type}">
+            <span class="gutter"
+              >{line.type === "add"
+                ? "+"
+                : line.type === "del"
+                  ? "−"
+                  : " "}</span
+            ><span class="dl-text">{line.text}</span>
+          </div>
         {/each}
       </div>
 
@@ -260,16 +284,25 @@
         <div class="confirm-text">
           Push to <code>{bucket}/{path.trim()}</code>
           {#if selectedUrlMaps.length > 0}
-            and invalidate <strong>{selectedUrlMaps.length}</strong> load balancer{selectedUrlMaps.length > 1 ? 's' : ''}.
+            and invalidate <strong>{selectedUrlMaps.length}</strong> load
+            balancer{selectedUrlMaps.length > 1 ? "s" : ""}.
           {:else}
             <em>(no cache invalidation selected)</em>.
           {/if}
           The previous version will be backed up locally first.
         </div>
         <div class="confirm-btns">
-          <button class="btn" onclick={() => (reviewing = false)} disabled={submitting}>Cancel</button>
-          <button class="btn danger" onclick={confirmPush} disabled={submitting}>
-            {submitting ? 'Pushing…' : 'Confirm & push'}
+          <button
+            class="btn"
+            onclick={() => (reviewing = false)}
+            disabled={submitting}>Cancel</button
+          >
+          <button
+            class="btn danger"
+            onclick={confirmPush}
+            disabled={submitting}
+          >
+            {submitting ? "Pushing…" : "Confirm & push"}
           </button>
         </div>
       </div>
@@ -281,7 +314,8 @@
       <h2>Done</h2>
       <ul>
         <li>
-          <strong>Uploaded</strong> to <code>{result.bucket}/{result.path}</code>
+          <strong>Uploaded</strong> to
+          <code>{result.bucket}/{result.path}</code>
           <span class="muted">({result.contentType})</span>
         </li>
         <li>
@@ -289,7 +323,7 @@
           {#if result.backupPath}
             <code>{result.backupPath}</code>
           {:else}
-            <span class="muted">{result.backupSkippedReason ?? 'none'}</span>
+            <span class="muted">{result.backupSkippedReason ?? "none"}</span>
           {/if}
         </li>
         <li>
@@ -300,10 +334,16 @@
             <ul class="inv-list">
               {#each result.invalidations as inv (inv.urlMap)}
                 <li>
-                  <span class="tag {inv.ok ? 'ok' : 'err'}">{inv.ok ? 'ok' : 'failed'}</span>
+                  <span class="tag {inv.ok ? 'ok' : 'err'}"
+                    >{inv.ok ? "ok" : "failed"}</span
+                  >
                   <code>{inv.urlMap}</code>
-                  {#if inv.ok && inv.operationId}<span class="muted">op {inv.operationId}</span>{/if}
-                  {#if !inv.ok && inv.error}<span class="hint err">{inv.error}</span>{/if}
+                  {#if inv.ok && inv.operationId}<span class="muted"
+                      >op {inv.operationId}</span
+                    >{/if}
+                  {#if !inv.ok && inv.error}<span class="hint err"
+                      >{inv.error}</span
+                    >{/if}
                 </li>
               {/each}
             </ul>
@@ -320,7 +360,14 @@
     background: #0f1115;
     color: #e6e8ee;
     font-family:
-      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
   }
   :global(*) {
     box-sizing: border-box;
@@ -385,7 +432,7 @@
   }
 
   select,
-  input[type='text'],
+  input[type="text"],
   textarea {
     background: #0f1218;
     border: 1px solid #2a2f3d;
@@ -397,7 +444,7 @@
     transition: border-color 0.12s ease;
   }
   select:focus,
-  input[type='text']:focus,
+  input[type="text"]:focus,
   textarea:focus {
     border-color: #3b82f6;
   }
@@ -428,7 +475,8 @@
   .viewer,
   .editor,
   .diff {
-    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+    font-family:
+      ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     font-size: 0.82rem;
     line-height: 1.5;
     border-radius: 8px;

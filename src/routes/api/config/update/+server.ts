@@ -1,9 +1,13 @@
-import { error, json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { assertBucketAllowed, assertUrlMapAllowed, ForbiddenError } from '$lib/server/config';
-import { getProvider } from '$lib/server/providers';
-import { writeLocalBackup } from '$lib/server/backup';
-import type { InvalidationResult, UpdateResult } from '$lib/types';
+import { error, json } from "@sveltejs/kit";
+import type { RequestHandler } from "./$types";
+import {
+  assertBucketAllowed,
+  assertUrlMapAllowed,
+  ForbiddenError,
+} from "$lib/server/config";
+import { getProvider } from "$lib/server/providers";
+import { writeLocalBackup } from "$lib/server/backup";
+import type { InvalidationResult, UpdateResult } from "$lib/types";
 
 interface UpdateBody {
   bucket?: string;
@@ -14,11 +18,12 @@ interface UpdateBody {
 
 function contentTypeForPath(path: string): string {
   const lower = path.toLowerCase();
-  if (lower.endsWith('.json')) return 'application/json';
-  if (lower.endsWith('.js')) return 'application/javascript';
-  if (lower.endsWith('.css')) return 'text/css; charset=utf-8';
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html; charset=utf-8';
-  return 'text/plain; charset=utf-8';
+  if (lower.endsWith(".json")) return "application/json";
+  if (lower.endsWith(".js")) return "application/javascript";
+  if (lower.endsWith(".css")) return "text/css; charset=utf-8";
+  if (lower.endsWith(".html") || lower.endsWith(".htm"))
+    return "text/html; charset=utf-8";
+  return "text/plain; charset=utf-8";
 }
 
 /**
@@ -30,12 +35,12 @@ export const POST: RequestHandler = async ({ request }) => {
   try {
     body = await request.json();
   } catch {
-    error(400, 'Invalid JSON body.');
+    error(400, "Invalid JSON body.");
   }
 
-  const bucket = body.bucket?.trim() ?? '';
-  const path = body.path?.trim() ?? '';
-  const content = body.content ?? '';
+  const bucket = body.bucket?.trim() ?? "";
+  const path = body.path?.trim() ?? "";
+  const content = body.content ?? "";
   const urlMaps = Array.isArray(body.urlMaps) ? body.urlMaps : [];
 
   if (!bucket || !path) {
@@ -54,11 +59,14 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const contentType = contentTypeForPath(path);
-  if (contentType === 'application/json') {
+  if (contentType === "application/json") {
     try {
       JSON.parse(content);
     } catch (e) {
-      error(422, `New config is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+      error(
+        422,
+        `New config is not valid JSON: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -72,10 +80,13 @@ export const POST: RequestHandler = async ({ request }) => {
     if (current.exists && current.content !== null) {
       backupPath = await writeLocalBackup(bucket, path, current.content);
     } else {
-      backupSkippedReason = 'Object does not exist yet — nothing to back up.';
+      backupSkippedReason = "Object does not exist yet — nothing to back up.";
     }
   } catch (e) {
-    error(502, `Failed to read/backup current config: ${e instanceof Error ? e.message : String(e)}`);
+    error(
+      502,
+      `Failed to read/backup current config: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   // 2. Upload the new content.
@@ -94,13 +105,13 @@ export const POST: RequestHandler = async ({ request }) => {
         urlMap,
         ok: true,
         operationId: op.operationId,
-        operationName: op.operationName
+        operationName: op.operationName,
       });
     } catch (e) {
       invalidations.push({
         urlMap,
         ok: false,
-        error: e instanceof Error ? e.message : String(e)
+        error: e instanceof Error ? e.message : String(e),
       });
     }
   }
@@ -112,7 +123,7 @@ export const POST: RequestHandler = async ({ request }) => {
     backupSkippedReason,
     uploaded: true,
     contentType,
-    invalidations
+    invalidations,
   };
   return json(result);
 };

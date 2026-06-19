@@ -40,20 +40,24 @@ pnpm dev               # http://localhost:5173
 
 ### Environment (`.env`)
 
-| Var                                    | Purpose                                                                                                                                                                |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GCP_PROJECT_ID`                       | GCP project that owns the buckets and load balancers. **Optional when a key file is used** (derived from the key JSON's `project_id`); required for inline-creds auth. |
-| `GCP_CLIENT_EMAIL` + `GCP_PRIVATE_KEY` | Service-account credentials (inline). `\n` in the key is un-escaped automatically.                                                                                     |
-| `GCP_KEY_FILE`                         | Path to a service-account JSON key (used only if inline creds are absent).                                                                                             |
-| `GOOGLE_APPLICATION_CREDENTIALS`       | Standard GCP key-file var; honored as a fallback to `GCP_KEY_FILE`. In a pod, mount the SA secret and set this — it is picked up automatically.                        |
-| `GCP_BUCKETS`                          | Comma-separated bucket allowlist (the only buckets the tool can touch).                                                                                                |
-| `GCP_URL_MAPS`                         | Comma-separated URL map allowlist for invalidation. Entry = `name` or `name\|display.domain`.                                                                          |
-| `BACKUP_DIR`                           | Local directory for pre-overwrite backups (default `./backups`).                                                                                                       |
+| Var                              | Purpose                                                                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GCP_PROJECT_ID`                 | GCP project that owns the buckets and load balancers. **Optional when a key file is used** (derived from the key JSON's `project_id`); **required when using ADC**. |
+| `GCP_KEY_FILE`                   | Path to a service-account JSON key. Leave unset to use ADC.                                                                                                         |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Standard GCP key-file var; honored as a fallback to `GCP_KEY_FILE`. In a pod, mount the SA secret and set this — it is picked up automatically.                     |
+| `GCP_BUCKETS`                    | Comma-separated bucket allowlist (the only buckets the tool can touch).                                                                                             |
+| `GCP_URL_MAPS`                   | Comma-separated URL map allowlist for invalidation. Entry = `name` or `name\|display.domain`.                                                                       |
+| `BACKUP_DIR`                     | Local directory for pre-overwrite backups (default `./backups`).                                                                                                    |
 
-**Auth is service-account-key-only** — there is no ADC fallback. Provide either inline creds or
-a key file. The key file is resolved from `GCP_KEY_FILE`, then `GOOGLE_APPLICATION_CREDENTIALS`,
-so a pod that mounts the SA secret and sets the standard var works with no app-specific config —
-and `GCP_PROJECT_ID` can be omitted since it is read from the key JSON.
+**Auth** resolves in this order:
+
+1. **Service-account key file** — `GCP_KEY_FILE`, then `GOOGLE_APPLICATION_CREDENTIALS`. A pod
+   that mounts the SA secret and sets the standard var works with no app-specific config, and
+   `GCP_PROJECT_ID` can be omitted (read from the key JSON).
+2. **Application Default Credentials (ADC)** — when no key file is set. For local development run
+   `gcloud auth application-default login` (note: **not** plain `gcloud auth login`, which only
+   authenticates the `gcloud` CLI). On GCP-hosted compute the attached service account is used.
+   `GCP_PROJECT_ID` is required for this path.
 
 ### Required IAM (on the service account)
 

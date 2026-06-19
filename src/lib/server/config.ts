@@ -1,5 +1,6 @@
 // Server-only configuration + allowlist guards.
-// Auth model: service-account key only (no ADC).
+// Auth model: service-account key file, or Application Default Credentials
+// (gcloud auth application-default login / attached service account).
 
 import { readFileSync } from "node:fs";
 import { env } from "$env/dynamic/private";
@@ -48,15 +49,6 @@ export function resolveProjectId(): string {
     }
   }
   return "";
-}
-
-export function getClientEmail(): string {
-  return env.GCP_CLIENT_EMAIL?.trim() ?? "";
-}
-
-/** Private key with escaped newlines un-escaped (matches lighthouse handling). */
-export function getPrivateKey(): string {
-  return env.GCP_PRIVATE_KEY ? env.GCP_PRIVATE_KEY.replace(/\\n/g, "\n") : "";
 }
 
 /** Key-file path: GCP_KEY_FILE, else the standard GOOGLE_APPLICATION_CREDENTIALS (pod mount). */

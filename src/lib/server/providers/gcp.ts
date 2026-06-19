@@ -4,18 +4,11 @@
 
 import { Storage, type StorageOptions } from "@google-cloud/storage";
 import { UrlMapsClient } from "@google-cloud/compute";
-import {
-  ConfigError,
-  getClientEmail,
-  getKeyFile,
-  getPrivateKey,
-  resolveProjectId,
-} from "../config";
+import { ConfigError, getKeyFile, resolveProjectId } from "../config";
 import type { ConfigStore, InvalidateOp, ReadResult } from "./types";
 
 type ClientOptions = {
   projectId: string;
-  credentials?: { client_email: string; private_key: string };
   keyFilename?: string;
 };
 
@@ -26,17 +19,9 @@ function buildClientOptions(): ClientOptions {
   const projectId = resolveProjectId();
   if (!projectId) {
     throw new ConfigError(
-      "GCP_PROJECT_ID is not set and could not be derived from the key file.",
+      "GCP_PROJECT_ID is not set and could not be derived. Set GCP_PROJECT_ID " +
+        "(required when authenticating via gcloud ADC).",
     );
-  }
-
-  const clientEmail = getClientEmail();
-  const privateKey = getPrivateKey();
-  if (clientEmail && privateKey) {
-    return {
-      projectId,
-      credentials: { client_email: clientEmail, private_key: privateKey },
-    };
   }
 
   const keyFile = getKeyFile();
@@ -44,9 +29,9 @@ function buildClientOptions(): ClientOptions {
     return { projectId, keyFilename: keyFile };
   }
 
-  throw new ConfigError(
-    "No service-account credentials configured. Set GCP_CLIENT_EMAIL + GCP_PRIVATE_KEY, or GCP_KEY_FILE.",
-  );
+  // No key file → Application Default Credentials (gcloud auth application-default login,
+  // or the attached service account on GCP compute).
+  return { projectId };
 }
 
 function getStorage(): Storage {

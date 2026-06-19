@@ -5,7 +5,10 @@
 import { Storage, type StorageOptions } from "@google-cloud/storage";
 import { UrlMapsClient } from "@google-cloud/compute";
 import { ConfigError, getKeyFile, resolveProjectId } from "../config";
+import { createLogger } from "../logger";
 import type { ConfigStore, InvalidateOp, ReadResult } from "./types";
+
+const log = createLogger("gcp");
 
 type ClientOptions = {
   projectId: string;
@@ -36,14 +39,24 @@ function buildClientOptions(): ClientOptions {
 
 function getStorage(): Storage {
   if (!storage) {
-    storage = new Storage(buildClientOptions() as StorageOptions);
+    const opts = buildClientOptions();
+    log.debug("storage client initialized", {
+      projectId: opts.projectId,
+      auth: opts.keyFilename ? "keyFile" : "adc",
+    });
+    storage = new Storage(opts as StorageOptions);
   }
   return storage;
 }
 
 function getUrlMapsClient(): UrlMapsClient {
   if (!urlMaps) {
-    urlMaps = new UrlMapsClient(buildClientOptions());
+    const opts = buildClientOptions();
+    log.debug("urlMaps client initialized", {
+      projectId: opts.projectId,
+      auth: opts.keyFilename ? "keyFile" : "adc",
+    });
+    urlMaps = new UrlMapsClient(opts);
   }
   return urlMaps;
 }
@@ -59,6 +72,7 @@ function isNotFound(error: unknown): boolean {
 
 export const gcpStore: ConfigStore = {
   async readConfig(bucket, path): Promise<ReadResult> {
+    log.debug("reading object", { bucket, path });
     const file = getStorage().bucket(bucket).file(path);
     try {
       const [data] = await file.download();
@@ -69,16 +83,25 @@ export const gcpStore: ConfigStore = {
       } catch {
         // metadata is best-effort; ignore failures
       }
+      log.info("read object", {
+        bucket,
+        path,
+        bytes: data.length,
+        contentType,
+      });
       return { content: data.toString("utf-8"), exists: true, contentType };
     } catch (error) {
       if (isNotFound(error)) {
+        log.info("object not found", { bucket, path });
         return { content: null, exists: false };
       }
+      log.error("read failed", { bucket, path, err: error });
       throw error;
     }
   },
 
   async uploadConfig(bucket, path, content, contentType): Promise<void> {
+    const bytes = Buffer.byteLength(content, "utf-8");
     await getStorage()
       .bucket(bucket)
       .file(path)
@@ -86,6 +109,7 @@ export const gcpStore: ConfigStore = {
         metadata: { contentType },
         resumable: true,
       });
+    log.info("uploaded", { bucket, path, bytes, contentType });
   },
 
   async invalidate(urlMap, path): Promise<InvalidateOp> {
@@ -98,17 +122,25 @@ export const gcpStore: ConfigStore = {
     const raw = (
       operation as { latestResponse?: { name?: string; id?: string | number } }
     ).latestResponse;
-    return {
+    const op: InvalidateOp = {
       operationName: raw?.name,
       operationId: raw?.id != null ? String(raw.id) : undefined,
     };
+    log.info("invalidation requested", {
+      urlMap,
+      path: normalizedPath,
+      operationId: op.operationId,
+    });
+    return op;
   },
 
   async checkBucket(bucket): Promise<boolean> {
     try {
       await getStorage().bucket(bucket).getMetadata();
+      log.debug("bucket check ok", { bucket });
       return true;
     } catch {
+      log.debug("bucket check failed", { bucket });
       return false;
     }
   },

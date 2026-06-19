@@ -6,7 +6,13 @@
   let { data }: { data: PageData } = $props();
 
   // svelte-ignore state_referenced_locally
-  let bucket = $state(data.buckets[0] ?? "");
+  let stack = $state(data.stacks[0]?.id ?? "gcp");
+  const current = $derived(
+    data.stacks.find((s) => s.id === stack) ?? data.stacks[0],
+  );
+
+  // svelte-ignore state_referenced_locally
+  let bucket = $state(data.stacks[0]?.buckets[0] ?? "");
   let path = $state("");
 
   let currentContent = $state<string | null>(null);
@@ -15,7 +21,15 @@
 
   let newContent = $state("");
   // svelte-ignore state_referenced_locally
-  let selectedUrlMaps = $state<string[]>(data.urlMaps.map((m) => m.name));
+  let selectedUrlMaps = $state<string[]>(
+    data.stacks[0]?.urlMaps.map((m) => m.name) ?? [],
+  );
+
+  function changeStack() {
+    bucket = current?.buckets[0] ?? "";
+    selectedUrlMaps = current?.urlMaps.map((m) => m.name) ?? [];
+    resetTarget();
+  }
 
   let loadingCurrent = $state(false);
   let reviewing = $state(false);
@@ -56,7 +70,7 @@
     loadingCurrent = true;
     try {
       const res = await fetch(
-        `/api/config?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path.trim())}`,
+        `/api/config?stack=${encodeURIComponent(stack)}&bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path.trim())}`,
       );
       if (!res.ok) {
         errorMsg =
@@ -104,6 +118,7 @@
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          stack,
           bucket,
           path: path.trim(),
           content: newContent,
@@ -130,31 +145,40 @@
 </script>
 
 <svelte:head>
-  <title>Config Updates — GCP</title>
+  <title>Config Updates — {current?.label ?? "Cloud"}</title>
 </svelte:head>
 
 <main>
   <header>
     <h1>Config Updates</h1>
     <p class="sub">
-      Patch a config object in a GCS bucket, then invalidate the Cloud CDN cache
-      on the load balancer. <span class="badge">GCP</span>
+      Patch a config object in a cloud bucket, then invalidate the CDN cache on
+      the chosen targets. <span class="badge">{current?.label ?? "—"}</span>
     </p>
   </header>
 
-  {#if data.buckets.length === 0}
+  {#if data.stacks.length === 0}
     <div class="notice warn">
-      No buckets are configured. Set <code>GCP_BUCKETS</code> in your
-      <code>.env</code>.
+      No stacks are configured. Set <code>GCP_BUCKETS</code> and/or
+      <code>AWS_BUCKETS</code> in your <code>.env</code>.
     </div>
   {/if}
 
   <section class="card">
     <div class="row">
       <label class="field">
+        <span class="label">Stack</span>
+        <select bind:value={stack} onchange={changeStack}>
+          {#each data.stacks as s (s.id)}
+            <option value={s.id}>{s.label}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="field">
         <span class="label">Bucket</span>
         <select bind:value={bucket} onchange={resetTarget}>
-          {#each data.buckets as b (b)}
+          {#each current?.buckets ?? [] as b (b)}
             <option value={b}>{b}</option>
           {/each}
         </select>
@@ -221,14 +245,19 @@
   </section>
 
   <section class="card">
-    <span class="label">Invalidate cache on (whitelisted load balancers)</span>
-    {#if data.urlMaps.length === 0}
+    <span class="label"
+      >Invalidate cache on (whitelisted {current?.targetLabel ??
+        "targets"})</span
+    >
+    {#if (current?.urlMaps.length ?? 0) === 0}
       <p class="hint">
-        No URL maps configured. Set <code>GCP_URL_MAPS</code> to enable cache invalidation.
+        No {current?.targetLabel ?? "targets"} configured. Set
+        <code>{stack === "aws" ? "AWS_DISTRIBUTIONS" : "GCP_URL_MAPS"}</code> to enable
+        cache invalidation.
       </p>
     {:else}
       <div class="lb-list">
-        {#each data.urlMaps as m (m.name)}
+        {#each current?.urlMaps ?? [] as m (m.name)}
           <label class="check">
             <input
               type="checkbox"
@@ -284,8 +313,10 @@
         <div class="confirm-text">
           Push to <code>{bucket}/{path.trim()}</code>
           {#if selectedUrlMaps.length > 0}
-            and invalidate <strong>{selectedUrlMaps.length}</strong> load
-            balancer{selectedUrlMaps.length > 1 ? "s" : ""}.
+            and invalidate <strong>{selectedUrlMaps.length}</strong>
+            {stack === "aws"
+              ? "distribution"
+              : "load balancer"}{selectedUrlMaps.length > 1 ? "s" : ""}.
           {:else}
             <em>(no cache invalidation selected)</em>.
           {/if}
@@ -487,6 +518,13 @@
     overflow: auto;
     margin: 0;
   }
+  .viewer,
+  .editor {
+    height: 360px;
+    min-height: 0;
+    max-height: none;
+    width: 100%;
+  }
   .viewer {
     padding: 0.7rem 0.8rem;
     white-space: pre-wrap;
@@ -495,7 +533,6 @@
   .editor {
     padding: 0.7rem 0.8rem;
     resize: vertical;
-    width: 100%;
   }
 
   .muted {

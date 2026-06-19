@@ -4,7 +4,10 @@
 
 import { readFileSync } from "node:fs";
 import { env } from "$env/dynamic/private";
-import type { UrlMapTarget } from "$lib/types";
+import type { Stack, UrlMapTarget } from "$lib/types";
+import { createLogger } from "./logger";
+
+const log = createLogger("config");
 
 /** Thrown when a request targets a bucket / URL map outside the allowlist. */
 export class ForbiddenError extends Error {
@@ -46,6 +49,7 @@ export function resolveProjectId(): string {
       if (json.project_id) return json.project_id;
     } catch {
       // unreadable / non-JSON key file — fall through to the "not set" error
+      log.debug("key file unreadable; cannot derive project_id", { keyFile });
     }
   }
   return "";
@@ -69,10 +73,25 @@ export function getBuckets(): string[] {
  * GCP_URL_MAPS entries are "name" or "name|display.domain".
  */
 export function getUrlMaps(): UrlMapTarget[] {
-  return splitList(env.GCP_URL_MAPS).map((entry) => {
-    const [name, domain] = entry.split("|").map((p) => p.trim());
-    return domain ? { name, domain } : { name };
-  });
+  return parseTargets(env.GCP_URL_MAPS);
+}
+
+/** AWS region for the S3 / CloudFront clients (AWS_REGION). */
+export function getAwsRegion(): string {
+  return env.AWS_REGION?.trim() ?? "";
+}
+
+/** Allowlisted S3 bucket names (AWS_BUCKETS, comma-separated). */
+export function getAwsBuckets(): string[] {
+  return splitList(env.AWS_BUCKETS);
+}
+
+/**
+ * Allowlisted CloudFront distributions for cache invalidation.
+ * AWS_DISTRIBUTIONS entries are "distributionId" or "distributionId|display.domain".
+ */
+export function getAwsDistributions(): UrlMapTarget[] {
+  return parseTargets(env.AWS_DISTRIBUTIONS);
 }
 
 /** Local directory where previous config versions are backed up before overwrite. */
@@ -81,20 +100,52 @@ export function getBackupDir(): string {
   return dir && dir.length > 0 ? dir : "./backups";
 }
 
-export function assertBucketAllowed(bucket: string): void {
-  if (!getBuckets().includes(bucket)) {
+/** Validate an untrusted stack value, defaulting to "gcp". */
+export function parseStack(value: unknown): Stack {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (v === "aws") return "aws";
+  if (v === "gcp" || v === "") return "gcp";
+  log.warn("rejected unknown stack", { stack: String(value) });
+  throw new ForbiddenError(`Unknown stack "${String(value)}".`);
+}
+
+/** Allowlisted buckets for the given stack. */
+export function getBucketsForStack(stack: Stack): string[] {
+  return stack === "aws" ? getAwsBuckets() : getBuckets();
+}
+
+/** Allowlisted invalidation targets for the given stack. */
+export function getUrlMapsForStack(stack: Stack): UrlMapTarget[] {
+  return stack === "aws" ? getAwsDistributions() : getUrlMaps();
+}
+
+export function assertBucketAllowed(stack: Stack, bucket: string): void {
+  if (!getBucketsForStack(stack).includes(bucket)) {
+    const envVar = stack === "aws" ? "AWS_BUCKETS" : "GCP_BUCKETS";
+    log.warn("bucket denied", { stack, bucket, envVar });
     throw new ForbiddenError(
-      `Bucket "${bucket}" is not in the allowlist (GCP_BUCKETS).`,
+      `Bucket "${bucket}" is not in the allowlist (${envVar}).`,
     );
   }
 }
 
-export function assertUrlMapAllowed(urlMap: string): void {
-  if (!getUrlMaps().some((m) => m.name === urlMap)) {
+export function assertUrlMapAllowed(stack: Stack, urlMap: string): void {
+  if (!getUrlMapsForStack(stack).some((m) => m.name === urlMap)) {
+    const noun = stack === "aws" ? "Distribution" : "URL map";
+    const envVar = stack === "aws" ? "AWS_DISTRIBUTIONS" : "GCP_URL_MAPS";
+    log.warn("invalidation target denied", { stack, urlMap, envVar });
     throw new ForbiddenError(
-      `URL map "${urlMap}" is not in the allowlist (GCP_URL_MAPS).`,
+      `${noun} "${urlMap}" is not in the allowlist (${envVar}).`,
     );
   }
+}
+
+/** Parse a comma-separated "name" / "name|display.domain" list into targets. */
+function parseTargets(value: string | undefined): UrlMapTarget[] {
+  return splitList(value).map((entry) => {
+    const [name, domain] = entry.split("|").map((p) => p.trim());
+    return domain ? { name, domain } : { name };
+  });
 }
 
 function splitList(value: string | undefined): string[] {

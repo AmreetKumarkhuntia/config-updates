@@ -3,13 +3,18 @@ import type { RequestHandler } from "./$types";
 import {
   assertBucketAllowed,
   assertUrlMapAllowed,
+  parseStack,
   ForbiddenError,
 } from "$lib/server/config";
 import { getProvider } from "$lib/server/providers";
 import { writeLocalBackup } from "$lib/server/backup";
+import { createLogger, errMsg } from "$lib/server/logger";
 import type { InvalidationResult, UpdateResult } from "$lib/types";
 
+const log = createLogger("api:update");
+
 interface UpdateBody {
+  stack?: string;
   bucket?: string;
   path?: string;
   content?: string;
@@ -48,21 +53,32 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   // Server-side allowlist enforcement — UI selection is never trusted.
+  let stack;
   try {
-    assertBucketAllowed(bucket);
+    stack = parseStack(body.stack);
+    assertBucketAllowed(stack, bucket);
     for (const m of urlMaps) {
-      assertUrlMapAllowed(m);
+      assertUrlMapAllowed(stack, m);
     }
   } catch (e) {
     if (e instanceof ForbiddenError) error(403, e.message);
     throw e;
   }
 
+  log.info("update requested", {
+    stack,
+    bucket,
+    path,
+    contentBytes: Buffer.byteLength(content, "utf-8"),
+    urlMaps,
+  });
+
   const contentType = contentTypeForPath(path);
   if (contentType === "application/json") {
     try {
       JSON.parse(content);
     } catch (e) {
+      log.warn("rejected invalid JSON", { stack, bucket, path, err: e });
       error(
         422,
         `New config is not valid JSON: ${e instanceof Error ? e.message : String(e)}`,
@@ -70,7 +86,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  const provider = getProvider();
+  const provider = getProvider(stack);
 
   // 1. Read current content and back it up locally before overwriting.
   let backupPath: string | null = null;
@@ -79,21 +95,34 @@ export const POST: RequestHandler = async ({ request }) => {
     const current = await provider.readConfig(bucket, path);
     if (current.exists && current.content !== null) {
       backupPath = await writeLocalBackup(bucket, path, current.content);
+      log.info("backup phase complete", { stack, bucket, path, backupPath });
     } else {
       backupSkippedReason = "Object does not exist yet — nothing to back up.";
+      log.info("backup phase skipped", {
+        stack,
+        bucket,
+        path,
+        reason: backupSkippedReason,
+      });
     }
   } catch (e) {
-    error(
-      502,
-      `Failed to read/backup current config: ${e instanceof Error ? e.message : String(e)}`,
-    );
+    log.error("backup phase failed", { stack, bucket, path, err: e });
+    error(502, `Failed to read/backup current config: ${errMsg(e)}`);
   }
 
   // 2. Upload the new content.
   try {
     await provider.uploadConfig(bucket, path, content, contentType);
+    log.info("upload phase complete", {
+      stack,
+      bucket,
+      path,
+      contentType,
+      bytes: Buffer.byteLength(content, "utf-8"),
+    });
   } catch (e) {
-    error(502, `Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+    log.error("upload phase failed", { stack, bucket, path, err: e });
+    error(502, `Upload failed: ${errMsg(e)}`);
   }
 
   // 3. Invalidate each whitelisted URL map. Partial failures are surfaced, not swallowed.
@@ -107,16 +136,33 @@ export const POST: RequestHandler = async ({ request }) => {
         operationId: op.operationId,
         operationName: op.operationName,
       });
+      log.info("invalidation ok", {
+        stack,
+        urlMap,
+        operationId: op.operationId,
+      });
     } catch (e) {
       invalidations.push({
         urlMap,
         ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        error: errMsg(e),
       });
+      log.warn("invalidation failed", { stack, urlMap, err: e });
     }
   }
 
+  const okCount = invalidations.filter((i) => i.ok).length;
+  log.info("update complete", {
+    stack,
+    bucket,
+    path,
+    uploaded: true,
+    invalidationsOk: okCount,
+    invalidationsFailed: invalidations.length - okCount,
+  });
+
   const result: UpdateResult = {
+    stack,
     bucket,
     path,
     backupPath,

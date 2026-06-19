@@ -18,6 +18,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.1072.0",
+    "@aws-sdk/client-s3": "^3.1072.0",
     "@google-cloud/compute": "^6.9.1",
     "@google-cloud/storage": "^7.19.0"
   },

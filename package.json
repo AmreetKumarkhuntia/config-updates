@@ -1,0 +1,32 @@
+{
+  "name": "config-updates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Patch config objects in GCS buckets and invalidate GCP Cloud CDN cache on whitelisted load balancers.",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "dev": "vite dev --port 5100",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@google-cloud/compute": "^6.9.1",
+    "@google-cloud/storage": "^7.19.0"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/kit": "^2.59.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/node": "^25.9.3",
+    "svelte": "^5.55.5",
+    "svelte-check": "^4.4.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.12"
+  }
+}

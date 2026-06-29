@@ -10,24 +10,29 @@ const log = createLogger("backup");
 
 /**
  * Backs up `content` to `${BACKUP_DIR}/${bucket}/${dirname(path)}/${basename(path)}.<timestamp>.bak`.
+ * Accepts a UTF-8 string (text config) or raw bytes (binary objects, e.g. .parquet).
  * Returns the absolute path of the written backup file.
  */
 export async function writeLocalBackup(
   bucket: string,
   path: string,
-  content: string,
+  content: string | Uint8Array,
 ): Promise<string> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const safePath = path.replace(/^\/+/, ""); // strip any leading slashes
   const targetDir = resolve(getBackupDir(), bucket, dirname(safePath));
   await mkdir(targetDir, { recursive: true });
   const file = join(targetDir, `${basename(safePath)}.${timestamp}.bak`);
-  await writeFile(file, content, "utf-8");
+  const bytes =
+    typeof content === "string"
+      ? Buffer.byteLength(content, "utf-8")
+      : content.byteLength;
+  await writeFile(file, content, typeof content === "string" ? "utf-8" : null);
   log.info("backup written", {
     bucket,
     path,
     backupPath: file,
-    bytes: Buffer.byteLength(content, "utf-8"),
+    bytes,
   });
   return file;
 }

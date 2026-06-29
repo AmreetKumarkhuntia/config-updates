@@ -16,3 +16,4 @@ vite.config.ts.timestamp-*
 /.gcp
 
 .DS_Store
+./backups

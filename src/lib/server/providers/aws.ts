@@ -16,7 +16,12 @@ import {
 } from "@aws-sdk/client-cloudfront";
 import { ConfigError, getAwsRegion } from "../config";
 import { createLogger } from "../logger";
-import type { ConfigStore, InvalidateOp, ReadResult } from "./types";
+import type {
+  ConfigStore,
+  DownloadResult,
+  InvalidateOp,
+  ReadResult,
+} from "./types";
 
 const log = createLogger("aws");
 
@@ -88,6 +93,32 @@ export const awsStore: ConfigStore = {
         return { content: null, exists: false };
       }
       log.error("read failed", { bucket, path, err: error });
+      throw error;
+    }
+  },
+
+  async downloadObject(bucket, path): Promise<DownloadResult> {
+    log.debug("downloading object", { bucket, path });
+    try {
+      const res = await getS3().send(
+        new GetObjectCommand({ Bucket: bucket, Key: path }),
+      );
+      const bytes =
+        (await res.Body?.transformToByteArray()) ?? new Uint8Array();
+      const contentType = res.ContentType ?? undefined;
+      log.info("downloaded object", {
+        bucket,
+        path,
+        bytes: bytes.length,
+        contentType,
+      });
+      return { bytes, exists: true, contentType };
+    } catch (error) {
+      if (isNotFound(error)) {
+        log.info("object not found", { bucket, path });
+        return { bytes: null, exists: false };
+      }
+      log.error("download failed", { bucket, path, err: error });
       throw error;
     }
   },

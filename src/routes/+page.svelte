@@ -32,6 +32,8 @@
   }
 
   let loadingCurrent = $state(false);
+  let downloading = $state(false);
+  let backupMsg = $state("");
   let reviewing = $state(false);
   let submitting = $state(false);
   let errorMsg = $state("");
@@ -89,6 +91,35 @@
         e instanceof Error ? e.message : "Network error while loading config.";
     } finally {
       loadingCurrent = false;
+    }
+  }
+
+  async function downloadBackup() {
+    errorMsg = "";
+    backupMsg = "";
+    if (!bucket || !path.trim()) {
+      errorMsg = "Select a bucket and enter a path first.";
+      return;
+    }
+    downloading = true;
+    try {
+      const res = await fetch("/api/config/backup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stack, bucket, path: path.trim() }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        errorMsg = text || `Download failed (${res.status}).`;
+        return;
+      }
+      const body = JSON.parse(text) as { backupPath: string; bytes: number };
+      backupMsg = `Saved ${body.bytes} bytes to ${body.backupPath}`;
+    } catch (e) {
+      errorMsg =
+        e instanceof Error ? e.message : "Network error during download.";
+    } finally {
+      downloading = false;
     }
   }
 
@@ -200,7 +231,23 @@
       <button class="btn" onclick={loadCurrent} disabled={loadingCurrent}>
         {loadingCurrent ? "Loading…" : "Load current"}
       </button>
+
+      <button
+        class="btn"
+        onclick={downloadBackup}
+        disabled={downloading || !bucket || !path.trim()}
+        title="Save the current object to the local backup folder (works for any file, including binary)"
+      >
+        {downloading ? "Downloading…" : "Download to backup"}
+      </button>
     </div>
+
+    {#if backupMsg}
+      <div class="notice ok">
+        <span class="tag ok">backed up</span>
+        <code>{backupMsg}</code>
+      </div>
+    {/if}
   </section>
 
   <section class="card">
@@ -647,6 +694,20 @@
     background: #2a1e07;
     border: 1px solid #92400e;
     color: #fde68a;
+  }
+  .notice.ok {
+    background: #052e23;
+    border: 1px solid #065f46;
+    color: #a7f3d0;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-top: 0.85rem;
+    margin-bottom: 0;
+    flex-wrap: wrap;
+  }
+  .notice.ok code {
+    word-break: break-all;
   }
 
   .diff {

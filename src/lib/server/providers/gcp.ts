@@ -6,7 +6,12 @@ import { Storage, type StorageOptions } from "@google-cloud/storage";
 import { UrlMapsClient } from "@google-cloud/compute";
 import { ConfigError, getKeyFile, resolveProjectId } from "../config";
 import { createLogger } from "../logger";
-import type { ConfigStore, InvalidateOp, ReadResult } from "./types";
+import type {
+  ConfigStore,
+  DownloadResult,
+  InvalidateOp,
+  ReadResult,
+} from "./types";
 
 const log = createLogger("gcp");
 
@@ -96,6 +101,35 @@ export const gcpStore: ConfigStore = {
         return { content: null, exists: false };
       }
       log.error("read failed", { bucket, path, err: error });
+      throw error;
+    }
+  },
+
+  async downloadObject(bucket, path): Promise<DownloadResult> {
+    log.debug("downloading object", { bucket, path });
+    const file = getStorage().bucket(bucket).file(path);
+    try {
+      const [data] = await file.download();
+      let contentType: string | undefined;
+      try {
+        const [meta] = await file.getMetadata();
+        contentType = meta.contentType ?? undefined;
+      } catch {
+        // metadata is best-effort; ignore failures
+      }
+      log.info("downloaded object", {
+        bucket,
+        path,
+        bytes: data.length,
+        contentType,
+      });
+      return { bytes: data, exists: true, contentType };
+    } catch (error) {
+      if (isNotFound(error)) {
+        log.info("object not found", { bucket, path });
+        return { bytes: null, exists: false };
+      }
+      log.error("download failed", { bucket, path, err: error });
       throw error;
     }
   },
